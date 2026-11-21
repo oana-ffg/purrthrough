@@ -15,8 +15,10 @@
 		523B6809887EBEA09B3F0340 /* ServiceManagement.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1D6E55E48A3702BE8A403167 /* ServiceManagement.framework */; };
 		536DAB9D4B26A5D0C8717BD9 /* AudioHardware.swift in Sources */ = {isa = PBXBuildFile; fileRef = C46E2F0497CD3F80AB4C371D /* AudioHardware.swift */; };
 		59A400D812AAE9FC2AF284A5 /* DriftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E61CB73A152DFEC7A35ECFC /* DriftController.swift */; };
+		76CDCBFD167ED2197F9C075E /* PlaybackGain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7989A45008A98E9BA352F36A /* PlaybackGain.swift */; };
 		7B685154F877BFE67F5EAA14 /* OutputPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F33A798736FC651F0F9E7557 /* OutputPlayer.swift */; };
 		7FB97801BF20A41FD8B2524D /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BCB963BD9888A73EBF792A7C /* AudioToolbox.framework */; };
+		84C5C2D0A58AD2FAC1F99415 /* VolumeMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83C813B8AB10980A0FDC9991 /* VolumeMenuView.swift */; };
 		8AE4DB15DDF054D6F1A76A20 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE734DACB2C321F6B9333A1B /* StatusItemController.swift */; };
 		8CA3902DE35DE163C777297F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 24475F93296ABC19A211914C /* Assets.xcassets */; };
 		A414320BA19C7945B8AFE1D4 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4EC42E7A7AFDC5E79D7090AF /* AVFoundation.framework */; };
@@ -36,7 +38,9 @@
 		3FE0C19C6E82FFDD3C9BAC6C /* StereoRingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StereoRingBuffer.swift; sourceTree = "<group>"; };
 		4B937C4D642E53441425A0FA /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		4EC42E7A7AFDC5E79D7090AF /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		7989A45008A98E9BA352F36A /* PlaybackGain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackGain.swift; sourceTree = "<group>"; };
 		7E61CB73A152DFEC7A35ECFC /* DriftController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DriftController.swift; sourceTree = "<group>"; };
+		83C813B8AB10980A0FDC9991 /* VolumeMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeMenuView.swift; sourceTree = "<group>"; };
 		850469E5153553962BD2175D /* InputSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputSelection.swift; sourceTree = "<group>"; };
 		BCB963BD9888A73EBF792A7C /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
 		C46E2F0497CD3F80AB4C371D /* AudioHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioHardware.swift; sourceTree = "<group>"; };
@@ -77,6 +81,7 @@
 			children = (
 				7E61CB73A152DFEC7A35ECFC /* DriftController.swift */,
 				850469E5153553962BD2175D /* InputSelection.swift */,
+				7989A45008A98E9BA352F36A /* PlaybackGain.swift */,
 				3FE0C19C6E82FFDD3C9BAC6C /* StereoRingBuffer.swift */,
 			);
 			path = PurrthroughCore;
@@ -112,6 +117,7 @@
 				0F1F0A72DECA32A89F85E828 /* PlaythroughController.swift */,
 				CE734DACB2C321F6B9333A1B /* StatusItemController.swift */,
 				08386803583F0EADB7045BB4 /* UpdateController.swift */,
+				83C813B8AB10980A0FDC9991 /* VolumeMenuView.swift */,
 			);
 			path = PurrthroughApp;
 			sourceTree = "<group>";
@@ -215,10 +221,12 @@
 				B3BF838443AB69D47DB591F8 /* InputCapture.swift in Sources */,
 				48F5C83E7867D4C789AC9E61 /* InputSelection.swift in Sources */,
 				7B685154F877BFE67F5EAA14 /* OutputPlayer.swift in Sources */,
+				76CDCBFD167ED2197F9C075E /* PlaybackGain.swift in Sources */,
 				1C92A5E87555A6AC17D8F5F3 /* PlaythroughController.swift in Sources */,
 				8AE4DB15DDF054D6F1A76A20 /* StatusItemController.swift in Sources */,
 				BC94EA755800D13AB88D25DE /* StereoRingBuffer.swift in Sources */,
 				C972F7EB13EC0482A349C17C /* UpdateController.swift in Sources */,
+				84C5C2D0A58AD2FAC1F99415 /* VolumeMenuView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

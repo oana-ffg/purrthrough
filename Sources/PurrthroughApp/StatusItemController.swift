@@ -32,6 +32,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             menu.addItem(action("Open Microphone Settings…", #selector(openMicrophoneSettings)))
         }
         menu.addItem(toggle("Play Through", on: playthrough.isEnabled, #selector(togglePlaythrough)))
+        let volume = NSMenuItem()
+        volume.view = VolumeMenuView(volume: playthrough.volume, maximum: PlaybackGain.maximum) { [weak self] value in
+            self?.playthrough.volume = value
+        }
+        menu.addItem(volume)
         menu.addItem(.separator())
 
         menu.addItem(.sectionHeader(title: "Input"))

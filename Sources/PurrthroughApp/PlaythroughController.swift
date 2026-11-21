@@ -21,6 +21,7 @@ final class PlaythroughController {
         static let enabled = "enabled"
         static let inputUID = "inputUID"
         static let inputName = "inputName"
+        static let volume = "volume"
     }
 
     private static let targetLatency = 0.04
@@ -50,6 +51,17 @@ final class PlaythroughController {
     private var retryTimer: Timer?
     private var lastProgress = (written: 0, read: 0, at: Date())
     private var ticks = 0
+
+    /// Playback volume, 0...PlaybackGain.maximum (1 = unchanged). Applies instantly.
+    private lazy var gain = PlaybackGain((defaults.object(forKey: Key.volume) as? NSNumber)?.floatValue ?? 1)
+
+    var volume: Float {
+        get { gain.value }
+        set {
+            gain.value = newValue
+            defaults.set(gain.value, forKey: Key.volume)
+        }
+    }
 
     var isEnabled: Bool {
         get { defaults.object(forKey: Key.enabled) as? Bool ?? true }
@@ -177,7 +189,7 @@ final class PlaythroughController {
         guard let ring, let capture else { return }
         player = nil
         playerDevice = nil
-        let player = try OutputPlayer(device: device, sampleRate: capture.sampleRate, ring: ring) { [weak self] in
+        let player = try OutputPlayer(device: device, sampleRate: capture.sampleRate, ring: ring, gain: gain) { [weak self] in
             self?.restartOutput(reason: "output configuration changed")
         }
         self.player = player

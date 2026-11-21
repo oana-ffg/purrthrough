@@ -18,7 +18,7 @@ final class OutputPlayer {
     private let source: AVAudioSourceNode
     private var configurationObserver: NSObjectProtocol?
 
-    init(device: AudioDeviceID, sampleRate: Double, ring: StereoRingBuffer,
+    init(device: AudioDeviceID, sampleRate: Double, ring: StereoRingBuffer, gain: PlaybackGain,
          onConfigurationChange: @escaping @MainActor () -> Void) throws {
         deviceName = try AudioHardware.name(of: device)
         guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 2) else {
@@ -31,6 +31,8 @@ final class OutputPlayer {
             let right = buffers[1].mData!.assumingMemoryBound(to: Float.self)
             if ring.read(left: left, right: right, frames: Int(frameCount)) == 0 {
                 isSilence.pointee = true
+            } else {
+                gain.apply(left: left, right: right, frames: Int(frameCount))
             }
             return noErr
         }
