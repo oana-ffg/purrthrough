@@ -67,6 +67,11 @@ final class OutputPlayer {
 
     var isRunning: Bool { engine.isRunning }
 
+    /// Stops rendering; returns once the render thread no longer calls the source.
+    func stop() {
+        engine.stop()
+    }
+
     func setRate(_ rate: Double) {
         varispeed.rate = Float(rate)
     }

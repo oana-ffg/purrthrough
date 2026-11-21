@@ -12,8 +12,8 @@ public struct DriftController: Sendable {
         public var trimToFrames: Int?
     }
 
-    public let targetFrames: Int
-    public let maximumFrames: Int
+    public private(set) var targetFrames: Int
+    public private(set) var maximumFrames: Int
     public let maximumDeviation: Double
     private let gain: Double
     private let smoothing: Double
@@ -46,6 +46,13 @@ public struct DriftController: Sendable {
         let error = (smoothed - Double(targetFrames)) / Double(targetFrames)
         let correction = min(max(gain * error, -maximumDeviation), maximumDeviation)
         return Decision(rate: 1 + correction, trimToFrames: nil)
+    }
+
+    /// Adopt a new plan, e.g. once a device turns out to move larger chunks.
+    public mutating func retarget(_ plan: LatencyPlan) {
+        precondition(plan.targetFrames > 0 && plan.maximumFrames > plan.targetFrames)
+        targetFrames = plan.targetFrames
+        maximumFrames = plan.maximumFrames
     }
 
     /// Forget history, e.g. after the output device changed.

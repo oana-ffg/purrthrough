@@ -94,22 +94,30 @@ enum AudioHardware {
     }
 }
 
+extension AudioObjectPropertyAddress {
+    static func global(_ selector: AudioObjectPropertySelector) -> Self {
+        Self(mSelector: selector, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+    }
+
+    static func input(_ selector: AudioObjectPropertySelector) -> Self {
+        Self(mSelector: selector, mScope: kAudioObjectPropertyScopeInput, mElement: kAudioObjectPropertyElementMain)
+    }
+}
+
 /// Calls `handler` on the main queue whenever one of the given HAL properties
-/// changes. Listening stops when the observer is released.
+/// changes. Listening stops when the observer is released. A registration
+/// failure throws, and any listeners already added are removed by deinit.
 final class AudioPropertyObserver {
     private let object: AudioObjectID
     private var addresses: [AudioObjectPropertyAddress]
     private let block: AudioObjectPropertyListenerBlock
 
-    init(object: AudioObjectID, selectors: [AudioObjectPropertySelector],
-         scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal, handler: @escaping @MainActor () -> Void) throws {
+    init(object: AudioObjectID, addresses: [AudioObjectPropertyAddress], handler: @escaping @MainActor () -> Void) throws {
         self.object = object
-        addresses = selectors.map {
-            AudioObjectPropertyAddress(mSelector: $0, mScope: scope, mElement: kAudioObjectPropertyElementMain)
-        }
+        self.addresses = addresses
         block = { _, _ in MainActor.assumeIsolated { handler() } }
-        for index in addresses.indices {
-            try check(AudioObjectAddPropertyListenerBlock(object, &addresses[index], .main, block),
+        for index in self.addresses.indices {
+            try check(AudioObjectAddPropertyListenerBlock(object, &self.addresses[index], .main, block),
                       "Watching audio property \(addresses[index].mSelector)")
         }
     }

@@ -40,6 +40,9 @@ final class InputCapture: @unchecked Sendable {
     }
 
     deinit {
+        // The owner stops capture before releasing it (see `stop()`); this is the
+        // fallback for a failed initialization. The callback never retains `self`,
+        // so deinit can only run on the owner's thread, never inside a callback.
         AudioOutputUnitStop(unit)
         AudioUnitUninitialize(unit)
         AudioComponentInstanceDispose(unit)
@@ -51,6 +54,12 @@ final class InputCapture: @unchecked Sendable {
 
     func start() throws {
         try check(AudioOutputUnitStart(unit), "Starting capture")
+    }
+
+    /// Stops the device IO. Returns after any in-flight callback has finished, so
+    /// the owner may release this object afterwards. Idempotent.
+    func stop() {
+        AudioOutputUnitStop(unit)
     }
 
     /// Render errors seen on the IO thread since the last call.
@@ -86,8 +95,12 @@ final class InputCapture: @unchecked Sendable {
 
         var callback = AURenderCallbackStruct(
             inputProc: { refCon, flags, timeStamp, bus, frames, _ in
-                Unmanaged<InputCapture>.fromOpaque(refCon).takeUnretainedValue()
-                    .capture(flags: flags, timeStamp: timeStamp, bus: bus, frames: frames)
+                // No retain/release on the realtime thread: a temporary strong
+                // reference could make this callback drop the last one and run
+                // deinit (stopping and disposing the unit) from inside itself.
+                Unmanaged<InputCapture>.fromOpaque(refCon)._withUnsafeGuaranteedRef {
+                    $0.capture(flags: flags, timeStamp: timeStamp, bus: bus, frames: frames)
+                }
             },
             inputProcRefCon: Unmanaged.passUnretained(self).toOpaque())
         try setProperty(kAudioOutputUnitProperty_SetInputCallback, kAudioUnitScope_Global, 0, &callback,

@@ -5,6 +5,9 @@ import Synchronization
 /// The input device's IO thread is the only writer and the output device's render
 /// thread is the only reader. Neither side allocates, locks, or blocks. Counters
 /// are monotonic frame totals; `Int` (64-bit) cannot overflow in practice.
+///
+/// After an underrun (and at startup) the reader re-primes: it plays silence until
+/// `primeFrames` are queued, instead of stuttering on every short chunk.
 public final class StereoRingBuffer: @unchecked Sendable {
     public let capacityFrames: Int
 
@@ -15,6 +18,13 @@ public final class StereoRingBuffer: @unchecked Sendable {
     private let trimRequest = Atomic<Int>(-1)
     private let droppedFrames = Atomic<Int>(0)
     private let missingFrames = Atomic<Int>(0)
+    private let underrunCount = Atomic<Int>(0)
+    private let largestWriteFrames = Atomic<Int>(0)
+    private let largestReadFrames = Atomic<Int>(0)
+    private let primeLevel = Atomic<Int>(0)
+    /// Reader-owned. Atomic only because the render thread may change when the
+    /// output device is rebuilt.
+    private let priming = Atomic<Bool>(true)
 
     public init(capacityFrames: Int) {
         precondition(capacityFrames > 0)
@@ -42,13 +52,31 @@ public final class StereoRingBuffer: @unchecked Sendable {
     /// Input frames discarded because the buffer was full.
     public var totalDropped: Int { droppedFrames.load(ordering: .relaxed) }
 
-    /// Output frames rendered as silence because the buffer was empty.
+    /// Output frames rendered as silence because the buffer ran dry mid-stream.
+    /// Silence while priming at startup is not counted.
     public var totalMissing: Int { missingFrames.load(ordering: .relaxed) }
+
+    /// Number of times the buffer ran dry mid-stream.
+    public var totalUnderruns: Int { underrunCount.load(ordering: .relaxed) }
+
+    /// Largest chunk the input side has delivered in one call.
+    public var largestWrite: Int { largestWriteFrames.load(ordering: .relaxed) }
+
+    /// Largest chunk the output side has requested in one call.
+    public var largestRead: Int { largestReadFrames.load(ordering: .relaxed) }
+
+    /// Any thread. How much audio to queue before (re)starting playback.
+    public func setPrimeLevel(_ frames: Int) {
+        primeLevel.store(min(max(0, frames), capacityFrames), ordering: .relaxed)
+    }
 
     /// Producer only. Pass the same pointer twice for a mono source.
     /// Returns the number of frames stored; the rest are dropped and counted.
     @discardableResult
     public func write(left: UnsafePointer<Float>, right: UnsafePointer<Float>, frames: Int) -> Int {
+        if frames > largestWriteFrames.load(ordering: .relaxed) {
+            largestWriteFrames.store(frames, ordering: .relaxed)
+        }
         let writeCount = writtenTotal.load(ordering: .relaxed)
         let readCount = readTotal.load(ordering: .acquiring)
         let free = capacityFrames - (writeCount - readCount)
@@ -68,13 +96,25 @@ public final class StereoRingBuffer: @unchecked Sendable {
     }
 
     /// Consumer only. Fills `frames` samples per channel, padding with silence on
-    /// underrun. Returns how many frames came from the buffer.
+    /// underrun or while priming. Returns how many frames came from the buffer.
     @discardableResult
     public func read(left: UnsafeMutablePointer<Float>, right: UnsafeMutablePointer<Float>, frames: Int) -> Int {
+        if frames > largestReadFrames.load(ordering: .relaxed) {
+            largestReadFrames.store(frames, ordering: .relaxed)
+        }
         applyPendingTrim()
         let readCount = readTotal.load(ordering: .relaxed)
         let writeCount = writtenTotal.load(ordering: .acquiring)
-        let count = min(frames, writeCount - readCount)
+        let queued = writeCount - readCount
+        if priming.load(ordering: .relaxed) {
+            guard queued >= max(primeLevel.load(ordering: .relaxed), frames) else {
+                left.update(repeating: 0, count: frames)
+                right.update(repeating: 0, count: frames)
+                return 0
+            }
+            priming.store(false, ordering: .relaxed)
+        }
+        let count = min(frames, queued)
         var position = readCount % capacityFrames
         for frame in 0..<count {
             left[frame] = storage[position * 2]
@@ -86,6 +126,8 @@ public final class StereoRingBuffer: @unchecked Sendable {
             (left + count).update(repeating: 0, count: frames - count)
             (right + count).update(repeating: 0, count: frames - count)
             missingFrames.add(frames - count, ordering: .relaxed)
+            underrunCount.add(1, ordering: .relaxed)
+            priming.store(true, ordering: .relaxed)
         }
         readTotal.store(readCount + count, ordering: .releasing)
         return count
@@ -93,6 +135,8 @@ public final class StereoRingBuffer: @unchecked Sendable {
 
     /// Any thread. Asks the reader to discard the oldest audio until at most
     /// `fillFrames` remain, bounding latency after a stall or startup backlog.
+    /// Callers must keep `fillFrames` above the largest read, or the very next
+    /// read underruns.
     public func requestTrim(toFill fillFrames: Int) {
         trimRequest.store(max(0, fillFrames), ordering: .releasing)
     }

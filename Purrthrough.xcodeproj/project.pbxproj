@@ -17,6 +17,7 @@
 		59A400D812AAE9FC2AF284A5 /* DriftController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E61CB73A152DFEC7A35ECFC /* DriftController.swift */; };
 		76CDCBFD167ED2197F9C075E /* PlaybackGain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7989A45008A98E9BA352F36A /* PlaybackGain.swift */; };
 		7B685154F877BFE67F5EAA14 /* OutputPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = F33A798736FC651F0F9E7557 /* OutputPlayer.swift */; };
+		7EA8549F0D658A7C6FD7C716 /* LatencyPlan.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F9C81774874585FB743F60 /* LatencyPlan.swift */; };
 		7FB97801BF20A41FD8B2524D /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BCB963BD9888A73EBF792A7C /* AudioToolbox.framework */; };
 		84C5C2D0A58AD2FAC1F99415 /* VolumeMenuView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83C813B8AB10980A0FDC9991 /* VolumeMenuView.swift */; };
 		8AE4DB15DDF054D6F1A76A20 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE734DACB2C321F6B9333A1B /* StatusItemController.swift */; };
@@ -43,6 +44,7 @@
 		83C813B8AB10980A0FDC9991 /* VolumeMenuView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VolumeMenuView.swift; sourceTree = "<group>"; };
 		850469E5153553962BD2175D /* InputSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputSelection.swift; sourceTree = "<group>"; };
 		BCB963BD9888A73EBF792A7C /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = System/Library/Frameworks/AudioToolbox.framework; sourceTree = SDKROOT; };
+		C1F9C81774874585FB743F60 /* LatencyPlan.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LatencyPlan.swift; sourceTree = "<group>"; };
 		C46E2F0497CD3F80AB4C371D /* AudioHardware.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioHardware.swift; sourceTree = "<group>"; };
 		C8161C25EBF6B808717C8039 /* CoreAudio.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreAudio.framework; path = System/Library/Frameworks/CoreAudio.framework; sourceTree = SDKROOT; };
 		C82ECEA1C3C72EE030624EB9 /* Purrthrough.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Purrthrough.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -81,6 +83,7 @@
 			children = (
 				7E61CB73A152DFEC7A35ECFC /* DriftController.swift */,
 				850469E5153553962BD2175D /* InputSelection.swift */,
+				C1F9C81774874585FB743F60 /* LatencyPlan.swift */,
 				7989A45008A98E9BA352F36A /* PlaybackGain.swift */,
 				3FE0C19C6E82FFDD3C9BAC6C /* StereoRingBuffer.swift */,
 			);
@@ -220,6 +223,7 @@
 				59A400D812AAE9FC2AF284A5 /* DriftController.swift in Sources */,
 				B3BF838443AB69D47DB591F8 /* InputCapture.swift in Sources */,
 				48F5C83E7867D4C789AC9E61 /* InputSelection.swift in Sources */,
+				7EA8549F0D658A7C6FD7C716 /* LatencyPlan.swift in Sources */,
 				7B685154F877BFE67F5EAA14 /* OutputPlayer.swift in Sources */,
 				76CDCBFD167ED2197F9C075E /* PlaybackGain.swift in Sources */,
 				1C92A5E87555A6AC17D8F5F3 /* PlaythroughController.swift in Sources */,

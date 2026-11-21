@@ -24,8 +24,6 @@ final class PlaythroughController {
         static let volume = "volume"
     }
 
-    private static let targetLatency = 0.04
-    private static let maximumLatency = 0.25
     private static let stallTimeout: TimeInterval = 2
     private static let retryDelay: TimeInterval = 3
 
@@ -43,6 +41,8 @@ final class PlaythroughController {
     private var player: OutputPlayer?
     private var playerDevice: AudioDeviceID?
     private var drift: DriftController?
+    private var plan: LatencyPlan?
+    private var sampleRate: Double = 0
 
     private var hardwareObserver: AudioPropertyObserver?
     private var inputObserver: AudioPropertyObserver?
@@ -74,15 +74,6 @@ final class PlaythroughController {
     var selectedInputUID: String? { defaults.string(forKey: Key.inputUID) }
 
     func start() {
-        do {
-            hardwareObserver = try AudioPropertyObserver(
-                object: AudioObjectID(kAudioObjectSystemObject),
-                selectors: [kAudioHardwarePropertyDevices, kAudioHardwarePropertyDefaultOutputDevice]
-            ) { [weak self] in self?.reconcile() }
-        } catch {
-            fail("Cannot watch audio devices: \(error.localizedDescription)")
-            return
-        }
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.restart(reason: "wake from sleep") }
@@ -131,10 +122,21 @@ final class PlaythroughController {
             return
         }
         do {
+            try ensureHardwareObserver()
             try reconcileHardware()
         } catch {
             fail(error.localizedDescription)
         }
+    }
+
+    /// Device and default-output changes drive everything else, so playback must
+    /// never run without this observer. Installing it is retried with the rest.
+    private func ensureHardwareObserver() throws {
+        guard hardwareObserver == nil else { return }
+        hardwareObserver = try AudioPropertyObserver(
+            object: AudioObjectID(kAudioObjectSystemObject),
+            addresses: [.global(kAudioHardwarePropertyDevices), .global(kAudioHardwarePropertyDefaultOutputDevice)]
+        ) { [weak self] in self?.reconcile() }
     }
 
     private func reconcileHardware() throws {
@@ -170,13 +172,16 @@ final class PlaythroughController {
         guard capture.sampleRate == rate else {
             throw AudioHardwareError(operation: "Matching the input rate (\(capture.sampleRate) vs \(rate) Hz)", status: -1)
         }
+        let plan = LatencyPlan(sampleRate: rate, largestRead: 0, largestWrite: 0)
+        ring.setPrimeLevel(plan.targetFrames)
         self.ring = ring
-        drift = DriftController(targetFrames: Int(rate * Self.targetLatency),
-                                maximumFrames: Int(rate * Self.maximumLatency))
+        self.plan = plan
+        sampleRate = rate
+        drift = DriftController(targetFrames: plan.targetFrames, maximumFrames: plan.maximumFrames)
         inputObserver = try AudioPropertyObserver(
             object: device,
-            selectors: [kAudioDevicePropertyNominalSampleRate, kAudioDevicePropertyDeviceIsAlive,
-                        kAudioDevicePropertyStreamConfiguration]
+            addresses: [.global(kAudioDevicePropertyNominalSampleRate), .global(kAudioDevicePropertyDeviceIsAlive),
+                        .input(kAudioDevicePropertyStreamConfiguration)]
         ) { [weak self] in self?.restart(reason: "input device changed") }
         try capture.start()
         self.capture = capture
@@ -187,8 +192,7 @@ final class PlaythroughController {
 
     private func startPlayer(device: AudioDeviceID) throws {
         guard let ring, let capture else { return }
-        player = nil
-        playerDevice = nil
+        stopPlayer()
         let player = try OutputPlayer(device: device, sampleRate: capture.sampleRate, ring: ring, gain: gain) { [weak self] in
             self?.restartOutput(reason: "output configuration changed")
         }
@@ -212,6 +216,14 @@ final class PlaythroughController {
 
     private func tick() {
         guard let ring, let player, var drift else { return }
+        // Grow the queue once a device turns out to move bigger chunks.
+        let updated = LatencyPlan(sampleRate: sampleRate, largestRead: ring.largestRead, largestWrite: ring.largestWrite)
+        if updated != plan {
+            plan = updated
+            drift.retarget(updated)
+            ring.setPrimeLevel(updated.targetFrames)
+            log.info("Latency target \(updated.targetFrames) frames (largest read \(ring.largestRead), write \(ring.largestWrite))")
+        }
         let decision = drift.update(fillFrames: ring.availableFrames)
         self.drift = drift
         if let trim = decision.trimToFrames { ring.requestTrim(toFill: trim) }
@@ -223,8 +235,8 @@ final class PlaythroughController {
         ticks += 1
         if ticks % 100 == 0 {
             log.info("""
-                fill \(ring.availableFrames) frames, rate \(decision.rate, format: .fixed(precision: 5)), \
-                dropped \(ring.totalDropped), missing \(ring.totalMissing)
+                fill \(ring.availableFrames)/\(drift.targetFrames) frames, rate \(decision.rate, format: .fixed(precision: 5)), \
+                underruns \(ring.totalUnderruns), missing \(ring.totalMissing), dropped \(ring.totalDropped)
                 """)
         }
         let now = Date()
@@ -248,8 +260,7 @@ final class PlaythroughController {
 
     private func restartOutput(reason: String) {
         log.notice("Restarting output: \(reason, privacy: .public)")
-        player = nil
-        playerDevice = nil
+        stopPlayer()
         reconcile()
     }
 
@@ -259,16 +270,25 @@ final class PlaythroughController {
         reconcile()
     }
 
+    /// Stop each realtime side explicitly before releasing it, so no callback can
+    /// still be running when its objects go away.
     private func teardown() {
         tickTimer?.invalidate()
         tickTimer = nil
-        player = nil
-        playerDevice = nil
+        stopPlayer()
+        capture?.stop()
         capture = nil
         captureUID = nil
         inputObserver = nil
         ring = nil
         drift = nil
+        plan = nil
+    }
+
+    private func stopPlayer() {
+        player?.stop()
+        player = nil
+        playerDevice = nil
     }
 
     private func fail(_ message: String) {

@@ -18,7 +18,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.delegate = self
         item.menu = menu
         playthrough.onStatusChange = { [weak self] in self?.refreshIcon() }
-        updater.onError = { [weak self] message in
+        updater.onIssueChange = { [weak self] message in
             self?.updateIssue = message
             self?.refreshIcon()
         }
@@ -130,8 +130,6 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     @objc private func checkForUpdates() {
-        updateIssue = nil
-        refreshIcon()
         updater.checkForUpdates()
     }
 
