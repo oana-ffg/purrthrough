@@ -1,7 +1,7 @@
 import AppKit
 
 /// "Volume" row with a live slider for the status menu. 100% leaves the input
-/// unchanged; up to 200% boosts a quiet line-level source.
+/// unchanged; up to 400% boosts a quiet line-level source.
 @MainActor
 final class VolumeMenuView: NSView {
     private let slider: NSSlider
@@ -14,6 +14,8 @@ final class VolumeMenuView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: 260, height: 30))
 
         let title = NSTextField(labelWithString: "Volume")
+        title.setContentHuggingPriority(.required, for: .horizontal)
+        title.setContentCompressionResistancePriority(.required, for: .horizontal)
         percent.alignment = .right
         percent.font = .monospacedDigitSystemFont(ofSize: NSFont.systemFontSize, weight: .regular)
         slider.isContinuous = true
@@ -48,5 +50,6 @@ final class VolumeMenuView: NSView {
 
     private func showPercent() {
         percent.stringValue = "\(Int((slider.floatValue * 100).rounded()))%"
+        slider.setAccessibilityValueDescription(percent.stringValue)
     }
 }

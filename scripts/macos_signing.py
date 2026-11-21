@@ -126,8 +126,8 @@ def signing_identity(certificate, key_entry):
                      pass_fds=(key_fd, password_fd))
     root = Path(tempfile.mkdtemp(prefix="purrthrough-signing-", dir=TEMP_ROOT))
     keychain = root / "publisher.keychain-db"
+    encrypted_bundle = root / "publisher.p12"
     try:
-        encrypted_bundle = root / "publisher.p12"
         with os.fdopen(os.open(encrypted_bundle, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "wb") as file:
             file.write(bundle)
         security("create-keychain", "-p", keychain_password, keychain, redactions=(keychain_password,))
@@ -144,7 +144,8 @@ def signing_identity(certificate, key_entry):
             raise ValueError("Temporary keychain lacks the expected Developer ID identity")
         yield keychain, fingerprint
     finally:
-        cleanup_preserving_error(lambda: remove_keychain(root, keychain))
+        # Delete the encrypted identity bundle even when an import step failed.
+        cleanup_preserving_error(lambda: (encrypted_bundle.unlink(missing_ok=True), remove_keychain(root, keychain)))
 
 
 def verify_publisher(path, identifier, team, *, runtime=True):

@@ -89,3 +89,42 @@ struct StereoRingBufferPrimingTests {
         #expect(ring.largestRead == 32)
     }
 }
+
+struct StereoRingBufferConcurrencyTests {
+    /// A real producer thread and consumer thread, checking that every sample
+    /// arrives exactly once and in order, with left and right kept together.
+    @Test func producerAndConsumerThreadsKeepSamplesOrdered() async {
+        let ring = StereoRingBuffer(capacityFrames: 512)
+        ring.setPrimeLevel(0)
+        let total = 2_000_000
+        let producer = Task.detached {
+            var next = 0
+            var left = [Float](repeating: 0, count: 64)
+            var right = left
+            while next < total {
+                let count = min(64, total - next)
+                for index in 0..<count {
+                    left[index] = Float(next + index)
+                    right[index] = -Float(next + index)
+                }
+                next += ring.write(left: left, right: right, frames: count)
+            }
+        }
+        let consumer = Task.detached { () -> Bool in
+            var expected = 0
+            var left = [Float](repeating: 0, count: 100)
+            var right = left
+            while expected < total {
+                let count = ring.read(left: &left, right: &right, frames: min(100, total - expected))
+                for index in 0..<count {
+                    // Floats represent these integers exactly up to 2^24.
+                    if left[index] != Float(expected) || right[index] != -Float(expected) { return false }
+                    expected += 1
+                }
+            }
+            return true
+        }
+        await producer.value
+        #expect(await consumer.value)
+    }
+}

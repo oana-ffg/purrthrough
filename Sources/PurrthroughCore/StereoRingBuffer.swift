@@ -65,6 +65,12 @@ public final class StereoRingBuffer: @unchecked Sendable {
     /// Largest chunk the output side has requested in one call.
     public var largestRead: Int { largestReadFrames.load(ordering: .relaxed) }
 
+    /// Forget the output's largest request, e.g. after switching to an output that
+    /// pulls smaller chunks. Call only while no reader is running.
+    public func resetLargestRead() {
+        largestReadFrames.store(0, ordering: .relaxed)
+    }
+
     /// Any thread. How much audio to queue before (re)starting playback.
     public func setPrimeLevel(_ frames: Int) {
         primeLevel.store(min(max(0, frames), capacityFrames), ordering: .relaxed)
@@ -107,7 +113,9 @@ public final class StereoRingBuffer: @unchecked Sendable {
         let writeCount = writtenTotal.load(ordering: .acquiring)
         let queued = writeCount - readCount
         if priming.load(ordering: .relaxed) {
-            guard queued >= max(primeLevel.load(ordering: .relaxed), frames) else {
+            // Never wait for more than the buffer can hold, or priming never ends.
+            let needed = min(max(primeLevel.load(ordering: .relaxed), frames), capacityFrames)
+            guard queued >= needed else {
                 left.update(repeating: 0, count: frames)
                 right.update(repeating: 0, count: frames)
                 return 0

@@ -1,4 +1,5 @@
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -57,6 +58,17 @@ class ReleaseGuards(unittest.TestCase):
         import plistlib
         declared = plistlib.loads(release.APP_ENTITLEMENTS.read_bytes())
         self.assertEqual(declared, release.EXPECTED_APP_ENTITLEMENTS)
+
+    def test_unused_sparkle_xpc_services_leave_no_dangling_link(self):
+        with tempfile.TemporaryDirectory(dir=release.TEMP_ROOT) as root:
+            framework = Path(root) / "Sparkle.framework"
+            (framework / "Versions/B/XPCServices/Installer.xpc").mkdir(parents=True)
+            (framework / "Versions/Current").symlink_to("B")
+            (framework / "XPCServices").symlink_to("Versions/Current/XPCServices")
+            with patch.object(release, "trash", side_effect=shutil.rmtree):
+                release.remove_unused_xpc_services(framework)
+            self.assertEqual(release.xpc_service_paths(framework), [])
+            self.assertFalse((framework / "XPCServices").is_symlink())
 
     def test_partially_attached_credential_image_is_detached_before_trashing(self):
         with tempfile.TemporaryDirectory() as root:

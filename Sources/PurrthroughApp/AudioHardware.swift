@@ -15,15 +15,26 @@ func check(_ status: OSStatus, _ operation: @autoclosure () -> String) throws {
 
 /// Thin, synchronous wrappers over the CoreAudio HAL property API.
 enum AudioHardware {
+    private static let log = Logger(subsystem: "com.firefungames.purrthrough", category: "hardware")
+
     static func defaultOutputDevice() throws -> AudioDeviceID {
         try systemProperty(kAudioHardwarePropertyDefaultOutputDevice)
     }
 
+    /// Every device with input channels. A device that vanishes or misbehaves
+    /// while being inspected is skipped (and logged) rather than failing the whole
+    /// list: an unrelated virtual driver or a Bluetooth device dropping out must
+    /// never stop playback from the device the user actually chose.
     static func inputDevices() throws -> [(id: AudioDeviceID, info: InputDeviceInfo)] {
         try allDevices().compactMap { id in
-            guard try channelCount(of: id, scope: kAudioObjectPropertyScopeInput) > 0 else { return nil }
-            let info = InputDeviceInfo(uid: try uid(of: id), name: try name(of: id), isBluetooth: try isBluetooth(id))
-            return (id, info)
+            do {
+                guard try channelCount(of: id, scope: kAudioObjectPropertyScopeInput) > 0 else { return nil }
+                let info = InputDeviceInfo(uid: try uid(of: id), name: try name(of: id), isBluetooth: isBluetooth(id))
+                return (id, info)
+            } catch {
+                log.info("Skipping audio device \(id): \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
         }
     }
 
@@ -40,8 +51,11 @@ enum AudioHardware {
         return rate
     }
 
-    static func isBluetooth(_ device: AudioDeviceID) throws -> Bool {
-        let transport: UInt32 = try property(device, kAudioDevicePropertyTransportType)
+    /// Devices that don't report a transport (some virtual drivers) are not Bluetooth.
+    static func isBluetooth(_ device: AudioDeviceID) -> Bool {
+        var address = AudioObjectPropertyAddress.global(kAudioDevicePropertyTransportType)
+        guard AudioObjectHasProperty(device, &address),
+              let transport: UInt32 = try? property(device, kAudioDevicePropertyTransportType) else { return false }
         return transport == kAudioDeviceTransportTypeBluetooth || transport == kAudioDeviceTransportTypeBluetoothLE
     }
 
@@ -50,9 +64,12 @@ enum AudioHardware {
             mSelector: kAudioDevicePropertyStreamConfiguration, mScope: scope, mElement: kAudioObjectPropertyElementMain)
         var size: UInt32 = 0
         try check(AudioObjectGetPropertyDataSize(device, &address, 0, nil, &size), "Reading stream configuration size")
+        // Too small to hold even the buffer count: the device has no streams here.
+        guard Int(size) >= MemoryLayout<AudioBufferList>.size else { return 0 }
         let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioBufferList>.alignment)
         defer { raw.deallocate() }
         try check(AudioObjectGetPropertyData(device, &address, 0, nil, &size, raw), "Reading stream configuration")
+        guard Int(size) >= MemoryLayout<AudioBufferList>.size else { return 0 }
         let list = UnsafeMutableAudioBufferListPointer(raw.assumingMemoryBound(to: AudioBufferList.self))
         return list.reduce(0) { $0 + Int($1.mNumberChannels) }
     }
@@ -66,7 +83,8 @@ enum AudioHardware {
         try check(AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size), "Listing audio devices")
         var devices = [AudioDeviceID](repeating: 0, count: Int(size) / MemoryLayout<AudioDeviceID>.size)
         try check(AudioObjectGetPropertyData(system, &address, 0, nil, &size, &devices), "Listing audio devices")
-        return devices
+        // A device may disappear between the two calls; keep only what was returned.
+        return Array(devices.prefix(Int(size) / MemoryLayout<AudioDeviceID>.size)).filter { $0 != kAudioObjectUnknown }
     }
 
     private static func systemProperty<T>(_ selector: AudioObjectPropertySelector) throws -> T {

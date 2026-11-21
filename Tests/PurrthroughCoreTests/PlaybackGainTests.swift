@@ -20,7 +20,7 @@ struct PlaybackGainTests {
             #expect(abs(sample) <= 1)
         }
         // Order is preserved: louder input stays louder after limiting.
-        #expect(right[0] > right[1].magnitude - 1e-6)
+        #expect(right[0] > right[1].magnitude)
     }
 
     @Test func attenuationIsNotLimited() {

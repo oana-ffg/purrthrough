@@ -23,14 +23,15 @@ That's because macOS treats every audio input like a microphone. Apps can record
 
 The usual workarounds are a paid audio router, a full DAW, or a command line like `ffmpeg` or `sox`. The first two are overkill. The last one is fragile: it stays glued to whichever output was active when you started it and breaks as soon as you connect your Bluetooth headphones. (Some `ffmpeg` builds play one second, garble and go quiet, which is how this app was born.)
 
-Purrthrough is the missing checkbox. It lives in the menu bar as a small cat 🐈 and plays the input you choose through whatever output your Mac is using right now.
+Purrthrough is the missing checkbox. It lives in the menu bar as a small meowing cat and plays the input you choose through whatever output your Mac is using right now.
 
 ## Features
 
-- **One click.** A menu-bar cat: filled while it's playing, an outline when idle, a warning sign when it needs you.
+- **One click.** A meowing cat in the menu bar: bright while it's playing, dimmed when idle, a warning sign when it needs you.
+- **Volume up to 400%.** A slider in the menu lifts quiet sources, such as a monitor's headphone jack, with a soft limiter so loud peaks round off instead of crackling.
 - **Follows your output.** Switch from speakers to AirPods or other Bluetooth headphones and the sound follows within a moment. It never stays stuck on the speakers behind your back.
 - **Bluetooth-friendly.** Purrthrough only opens the input you picked. It never touches your headset's microphone, which would drop the headset into low-quality "call mode". Bluetooth inputs are labelled so you can avoid choosing one by accident.
-- **Glitch-free over hours.** Two audio devices never tick at exactly the same speed. Purrthrough keeps a small buffer (about 40 ms) and adjusts playback speed by a fraction of a percent, far below what you can hear, so the sound never builds up delay, drops out or clicks.
+- **Glitch-free over hours.** Two audio devices never tick at exactly the same speed. Purrthrough keeps a small buffer (40 ms, or a little more for Bluetooth outputs that pull audio in large chunks) and adjusts playback speed by a fraction of a percent, far below what you can hear, so the sound never builds up delay, drops out or clicks.
 - **Self-healing.** Unplug the USB sound card and Purrthrough waits for it; plug it back in and playback resumes. Sleep, wake, sample-rate changes and devices that silently stop sending audio all trigger an automatic restart.
 - **Picks the obvious input.** On first launch it chooses an input whose name contains "Line". You can pick any other input from the menu.
 - **Start at Login** and **signed automatic updates**, each a single toggle in the menu.
@@ -55,16 +56,17 @@ input device ──► capture (Core Audio HAL unit)
                      │
                      ▼
             lock-free stereo buffer  ◄── drift controller (10×/second)
-                     │                    keeps ~40 ms queued by nudging
-                     ▼                    playback speed up to ±0.5%
+                     │                    keeps 40 ms (more for big output
+                     ▼                    chunks) queued, nudging speed ±0.5%
       AVAudioEngine: source ► varispeed ► mixer ► current output device
 ```
 
 - The capture side runs at the input device's native rate; the engine converts to the output's rate (for example 48 kHz USB in, 44.1 kHz Bluetooth out).
 - The realtime audio threads never allocate, lock or log. They talk through a single-producer, single-consumer buffer.
+- The buffer target grows to cover the largest chunks the devices actually move. After an underrun it refills before playing again rather than stuttering.
 - When the system output changes, only the playback side is rebuilt. The input keeps running and the buffer bridges the gap.
 
-The hardware-independent parts (the buffer, drift control and input selection) live in `Sources/PurrthroughCore` and are unit-tested with `swift test`.
+The hardware-independent parts (the buffer, drift control, latency planning, volume and input selection) live in `Sources/PurrthroughCore` and are unit-tested with `swift test`, including multi-threaded and bursty-device simulations.
 
 ## Build from source
 
@@ -81,6 +83,6 @@ Signed releases are produced locally by `scripts/release.py`. See [docs/releases
 ## Ideas
 
 - A virtual microphone that mixes Line In with your real microphone, for recording or calls.
-- A per-input volume control.
+- Playing two inputs at once.
 
 MIT licensed. Support: purrthrough@firefungames.com

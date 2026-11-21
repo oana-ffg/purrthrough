@@ -5,6 +5,7 @@ import os
 
 enum PlaythroughStatus: Equatable {
     case off
+    case awaitingMicrophoneAccess
     case needsMicrophoneAccess
     case noInputChosen
     case waitingForInput(String)
@@ -24,8 +25,11 @@ final class PlaythroughController {
         static let volume = "volume"
     }
 
-    private static let stallTimeout: TimeInterval = 2
+    /// Bluetooth outputs can take a couple of seconds to start pulling audio.
+    private static let stallTimeout: TimeInterval = 5
     private static let retryDelay: TimeInterval = 3
+    /// Lowest device rate accepted; anything below is a device mid-transition.
+    private static let minimumSampleRate = 8_000.0
 
     private let defaults = UserDefaults.standard
     private let log = Logger(subsystem: "com.firefungames.purrthrough", category: "playthrough")
@@ -38,6 +42,11 @@ final class PlaythroughController {
     private var ring: StereoRingBuffer?
     private var capture: InputCapture?
     private var captureUID: String?
+    private var captureDevice: AudioDeviceID?
+    /// Bumped whenever the capture or player is replaced. Callbacks already queued
+    /// on the main queue by a replaced object carry an old generation and are ignored.
+    private var captureGeneration = 0
+    private var outputGeneration = 0
     private var player: OutputPlayer?
     private var playerDevice: AudioDeviceID?
     private var drift: DriftController?
@@ -49,7 +58,9 @@ final class PlaythroughController {
     private var wakeObserver: NSObjectProtocol?
     private var tickTimer: Timer?
     private var retryTimer: Timer?
-    private var lastProgress = (written: 0, read: 0, at: Date())
+    /// Uptime-based so clock changes can neither hide nor fake a stall.
+    private var lastProgress = (written: 0, read: 0, at: ProcessInfo.processInfo.systemUptime)
+    private var isRequestingAccess = false
     private var ticks = 0
 
     /// Playback volume, 0...PlaybackGain.maximum (1 = unchanged). Applies instantly.
@@ -92,11 +103,14 @@ final class PlaythroughController {
     }
 
     func stop() {
+        retryTimer?.invalidate()
+        retryTimer = nil
         teardown()
         hardwareObserver = nil
         if let wakeObserver {
             NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver)
         }
+        wakeObserver = nil
     }
 
     /// Brings the running pipeline in line with settings and hardware.
@@ -112,11 +126,20 @@ final class PlaythroughController {
         case .authorized:
             break
         case .notDetermined:
+            teardown()
+            status = .awaitingMicrophoneAccess
+            guard !isRequestingAccess else { return }
+            isRequestingAccess = true
             AVCaptureDevice.requestAccess(for: .audio) { [weak self] _ in
-                Task { @MainActor in self?.reconcile() }
+                Task { @MainActor in
+                    self?.isRequestingAccess = false
+                    self?.reconcile()
+                }
             }
             return
         default:
+            // Re-checked whenever the menu opens, so granting access in System
+            // Settings takes effect without restarting Purrthrough.
             teardown()
             status = .needsMicrophoneAccess
             return
@@ -153,7 +176,8 @@ final class PlaythroughController {
             selectInput(chosen)
             return
         }
-        if captureUID != chosen.uid || capture == nil {
+        // A re-enumerated USB device keeps its UID but gets a new device ID.
+        if captureUID != chosen.uid || captureDevice != inputID || capture == nil {
             try startCapture(device: inputID, uid: chosen.uid)
         }
         let outputID = try AudioHardware.defaultOutputDevice()
@@ -167,7 +191,11 @@ final class PlaythroughController {
     private func startCapture(device: AudioDeviceID, uid: String) throws {
         teardown()
         let rate = try AudioHardware.nominalSampleRate(of: device)
-        let ring = StereoRingBuffer(capacityFrames: Int(rate))
+        guard rate.isFinite, rate >= Self.minimumSampleRate else {
+            throw AudioHardwareError(operation: "Reading a usable input sample rate (got \(rate) Hz)", status: -1)
+        }
+        // At least a second of audio, and never less than a large Bluetooth pull.
+        let ring = StereoRingBuffer(capacityFrames: max(Int(rate), 16_384))
         let capture = try InputCapture(device: device, ring: ring)
         guard capture.sampleRate == rate else {
             throw AudioHardwareError(operation: "Matching the input rate (\(capture.sampleRate) vs \(rate) Hz)", status: -1)
@@ -178,14 +206,19 @@ final class PlaythroughController {
         self.plan = plan
         sampleRate = rate
         drift = DriftController(targetFrames: plan.targetFrames, maximumFrames: plan.maximumFrames)
+        let generation = captureGeneration
         inputObserver = try AudioPropertyObserver(
             object: device,
             addresses: [.global(kAudioDevicePropertyNominalSampleRate), .global(kAudioDevicePropertyDeviceIsAlive),
                         .input(kAudioDevicePropertyStreamConfiguration)]
-        ) { [weak self] in self?.restart(reason: "input device changed") }
+        ) { [weak self] in
+            guard let self, captureGeneration == generation else { return }
+            restart(reason: "input device changed")
+        }
         try capture.start()
         self.capture = capture
         captureUID = uid
+        captureDevice = device
         log.info("Capturing \(uid, privacy: .public) at \(rate) Hz")
         startTicking()
     }
@@ -193,8 +226,12 @@ final class PlaythroughController {
     private func startPlayer(device: AudioDeviceID) throws {
         guard let ring, let capture else { return }
         stopPlayer()
+        // The new output may pull smaller chunks; relearn its size.
+        ring.resetLargestRead()
+        let generation = outputGeneration
         let player = try OutputPlayer(device: device, sampleRate: capture.sampleRate, ring: ring, gain: gain) { [weak self] in
-            self?.restartOutput(reason: "output configuration changed")
+            guard let self, outputGeneration == generation else { return }
+            restartOutput(reason: "output configuration changed")
         }
         self.player = player
         playerDevice = device
@@ -239,12 +276,12 @@ final class PlaythroughController {
                 underruns \(ring.totalUnderruns), missing \(ring.totalMissing), dropped \(ring.totalDropped)
                 """)
         }
-        let now = Date()
+        let now = ProcessInfo.processInfo.systemUptime
         let written = ring.totalWritten
         let read = ring.totalRead
         if written != lastProgress.written && read != lastProgress.read {
             lastProgress = (written, read, now)
-        } else if now.timeIntervalSince(lastProgress.at) > Self.stallTimeout {
+        } else if now - lastProgress.at > Self.stallTimeout {
             // A device stopped delivering or consuming audio without telling us.
             if written == lastProgress.written {
                 restart(reason: "input stalled")
@@ -255,7 +292,7 @@ final class PlaythroughController {
     }
 
     private func resetProgress() {
-        lastProgress = (ring?.totalWritten ?? 0, ring?.totalRead ?? 0, Date())
+        lastProgress = (ring?.totalWritten ?? 0, ring?.totalRead ?? 0, ProcessInfo.processInfo.systemUptime)
     }
 
     private func restartOutput(reason: String) {
@@ -279,6 +316,8 @@ final class PlaythroughController {
         capture?.stop()
         capture = nil
         captureUID = nil
+        captureDevice = nil
+        captureGeneration += 1
         inputObserver = nil
         ring = nil
         drift = nil
@@ -289,6 +328,7 @@ final class PlaythroughController {
         player?.stop()
         player = nil
         playerDevice = nil
+        outputGeneration += 1
     }
 
     private func fail(_ message: String) {

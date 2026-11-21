@@ -25,14 +25,21 @@ final class UpdateController: NSObject, @preconcurrency SPUUpdaterDelegate {
         // offers a checkbox for downloading only. Keep them as one preference so
         // "off" really means no background checks. A mixed state resolves to off.
         updatesAutomatically = updater.automaticallyChecksForUpdates && updater.automaticallyDownloadsUpdates
+        // Sparkle forwards these from UserDefaults KVO, which can fire on a
+        // background thread when preferences change outside the app.
+        let relink: @Sendable (Bool) -> Void = { [weak self] enabled in
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { self?.link(enabled) }
+            } else {
+                Task { @MainActor in self?.link(enabled) }
+            }
+        }
         observations = [
-            updater.observe(\.automaticallyDownloadsUpdates, options: [.new]) { [weak self] _, change in
-                guard let enabled = change.newValue else { return }
-                MainActor.assumeIsolated { self?.link(enabled) }
+            updater.observe(\.automaticallyDownloadsUpdates, options: [.new]) { _, change in
+                if let enabled = change.newValue { relink(enabled) }
             },
-            updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] _, change in
-                guard let enabled = change.newValue else { return }
-                MainActor.assumeIsolated { self?.link(enabled) }
+            updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { _, change in
+                if let enabled = change.newValue { relink(enabled) }
             },
         ]
         do { try updater.start() }
@@ -43,6 +50,9 @@ final class UpdateController: NSObject, @preconcurrency SPUUpdaterDelegate {
         get { controller.updater.automaticallyChecksForUpdates }
         set { link(newValue) }
     }
+
+    /// False while an update is already in progress or the updater failed to start.
+    var canCheckForUpdates: Bool { controller.updater.canCheckForUpdates }
 
     func checkForUpdates() {
         controller.checkForUpdates(nil)

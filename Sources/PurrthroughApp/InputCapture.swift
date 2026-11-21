@@ -14,6 +14,9 @@ final class InputCapture: @unchecked Sendable {
     private let ring: StereoRingBuffer
     private let maximumFrames: UInt32 = 8192
     private let bufferList: UnsafeMutableAudioBufferListPointer
+    /// The capture buffers we own. `AudioUnitRender` may repoint `mData`, so each
+    /// render starts from these and deinit frees these, never `mData`.
+    private let channelBuffers: UnsafeMutablePointer<UnsafeMutablePointer<Float>>
     private let renderFailures = Atomic<Int>(0)
 
     init(device: AudioDeviceID, ring: StereoRingBuffer) throws {
@@ -30,10 +33,12 @@ final class InputCapture: @unchecked Sendable {
         unit = instance!
         self.ring = ring
         bufferList = AudioBufferList.allocate(maximumBuffers: channels)
+        channelBuffers = .allocate(capacity: channels)
         for index in 0..<channels {
-            let bytes = Int(maximumFrames) * MemoryLayout<Float>.size
-            bufferList[index] = AudioBuffer(mNumberChannels: 1, mDataByteSize: UInt32(bytes),
-                                            mData: UnsafeMutableRawPointer.allocate(byteCount: bytes, alignment: 16))
+            let samples = UnsafeMutablePointer<Float>.allocate(capacity: Int(maximumFrames))
+            samples.initialize(repeating: 0, count: Int(maximumFrames))
+            channelBuffers[index] = samples
+            bufferList[index] = AudioBuffer(mNumberChannels: 1, mDataByteSize: maximumFrames * 4, mData: samples)
         }
         // Fully initialized from here on, so deinit releases everything if configuration fails.
         try configure(device: device, channels: UInt32(channels))
@@ -46,9 +51,10 @@ final class InputCapture: @unchecked Sendable {
         AudioOutputUnitStop(unit)
         AudioUnitUninitialize(unit)
         AudioComponentInstanceDispose(unit)
-        for buffer in bufferList {
-            buffer.mData?.deallocate()
+        for index in 0..<bufferList.count {
+            channelBuffers[index].deallocate()
         }
+        channelBuffers.deallocate()
         free(bufferList.unsafeMutablePointer)
     }
 
@@ -116,6 +122,7 @@ final class InputCapture: @unchecked Sendable {
             return kAudioUnitErr_TooManyFramesToProcess
         }
         for index in 0..<bufferList.count {
+            bufferList[index].mData = UnsafeMutableRawPointer(channelBuffers[index])
             bufferList[index].mDataByteSize = frames * UInt32(MemoryLayout<Float>.size)
         }
         let status = AudioUnitRender(unit, flags, timeStamp, bus, frames, bufferList.unsafeMutablePointer)
@@ -124,8 +131,12 @@ final class InputCapture: @unchecked Sendable {
             return status
         }
         // A mono device feeds the same samples to both ears.
-        let left = bufferList[0].mData!.assumingMemoryBound(to: Float.self)
-        let right = bufferList[bufferList.count - 1].mData!.assumingMemoryBound(to: Float.self)
+        guard let leftData = bufferList[0].mData, let rightData = bufferList[bufferList.count - 1].mData else {
+            renderFailures.add(1, ordering: .relaxed)
+            return kAudio_ParamError
+        }
+        let left = leftData.assumingMemoryBound(to: Float.self)
+        let right = rightData.assumingMemoryBound(to: Float.self)
         ring.write(left: left, right: right, frames: Int(frames))
         return noErr
     }

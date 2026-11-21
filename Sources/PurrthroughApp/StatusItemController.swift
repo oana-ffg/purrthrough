@@ -26,6 +26,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        if playthrough.status == .needsMicrophoneAccess {
+            // Access may have been granted in System Settings since the last look.
+            playthrough.reconcile()
+        }
         menu.removeAllItems()
         menu.addItem(disabled(statusText))
         if playthrough.status == .needsMicrophoneAccess {
@@ -56,9 +60,16 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(disabled("Follows the system output"))
         menu.addItem(.separator())
 
-        menu.addItem(toggle("Start at Login", on: SMAppService.mainApp.status == .enabled, #selector(toggleLogin)))
+        switch SMAppService.mainApp.status {
+        case .requiresApproval:
+            menu.addItem(action("Start at Login: Approve in System Settings…", #selector(openLoginItemsSettings)))
+        default:
+            menu.addItem(toggle("Start at Login", on: SMAppService.mainApp.status == .enabled, #selector(toggleLogin)))
+        }
         menu.addItem(toggle("Update Automatically", on: updater.updatesAutomatically, #selector(toggleUpdates)))
-        menu.addItem(action("Check for Updates…", #selector(checkForUpdates)))
+        let check = action("Check for Updates…", #selector(checkForUpdates))
+        check.isEnabled = updater.canCheckForUpdates
+        menu.addItem(check)
         if let updateIssue { menu.addItem(disabled(updateIssue)) }
         menu.addItem(.separator())
         menu.addItem(action("About Purrthrough", #selector(showAbout)))
@@ -68,6 +79,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private var statusText: String {
         switch playthrough.status {
         case .off: "Off"
+        case .awaitingMicrophoneAccess: "Waiting for microphone permission"
         case .needsMicrophoneAccess: "Needs permission to hear the input"
         case .noInputChosen: "Choose an input below"
         case .waitingForInput(let name): "Waiting for \(name)"
@@ -80,7 +92,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let button = item.button else { return }
         let image: NSImage?
         switch playthrough.status {
-        case .playing, .off, .waitingForInput, .noInputChosen:
+        case .playing, .off, .waitingForInput, .noInputChosen, .awaitingMicrophoneAccess:
             // The meowing cat; dimmed whenever it isn't passing sound through.
             image = NSImage(named: "MenuBarIcon")
             image?.accessibilityDescription = "Purrthrough"
@@ -123,6 +135,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         } catch {
             present(error, doing: "change Start at Login")
         }
+    }
+
+    @objc private func openLoginItemsSettings() {
+        SMAppService.openSystemSettingsLoginItems()
     }
 
     @objc private func toggleUpdates() {

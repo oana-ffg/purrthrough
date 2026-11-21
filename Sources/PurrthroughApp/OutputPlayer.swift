@@ -27,8 +27,11 @@ final class OutputPlayer {
         // Runs on the output device's realtime thread.
         source = AVAudioSourceNode(format: format) { isSilence, _, frameCount, audioBufferList -> OSStatus in
             let buffers = UnsafeMutableAudioBufferListPointer(audioBufferList)
-            let left = buffers[0].mData!.assumingMemoryBound(to: Float.self)
-            let right = buffers[1].mData!.assumingMemoryBound(to: Float.self)
+            guard buffers.count >= 2, let leftData = buffers[0].mData, let rightData = buffers[1].mData else {
+                return kAudio_ParamError
+            }
+            let left = leftData.assumingMemoryBound(to: Float.self)
+            let right = rightData.assumingMemoryBound(to: Float.self)
             if ring.read(left: left, right: right, frames: Int(frameCount)) == 0 {
                 isSilence.pointee = true
             } else {

@@ -67,8 +67,8 @@ def verify_app(app, team):
         expected = EXPECTED_APP_ENTITLEMENTS if entitlements_file else {}
         if entitlements != expected:
             raise ValueError(f"Unexpected release entitlements for {path.name}: {entitlements}")
-    if (framework / "Versions/B/XPCServices").exists():
-        raise ValueError("Non-sandboxed release must not contain unused Sparkle XPC services")
+    if xpc_service_paths(framework):
+        raise ValueError("Non-sandboxed release must not contain unused Sparkle XPC services or links to them")
     result = subprocess.run(["/usr/sbin/spctl", "-a", "-vv", "-t", "exec", str(app)], capture_output=True)
     print(result.stderr.decode().strip(), flush=True)
     if result.returncode:
@@ -78,6 +78,24 @@ def verify_app(app, team):
         architectures = set(run("lipo", "-archs", binary).decode().split())
         if architectures != {"arm64", "x86_64"}:
             raise ValueError(f"Expected universal Apple Silicon/Intel binary: {binary.name}")
+
+
+def xpc_service_paths(framework):
+    """The XPC services directory and the framework's top-level link to it, if present."""
+    paths = [framework / "Versions/B/XPCServices", framework / "XPCServices"]
+    return [path for path in paths if path.exists() or path.is_symlink()]
+
+
+def remove_unused_xpc_services(framework):
+    # Purrthrough is not sandboxed, so Sparkle's XPC services are unused. Removing the
+    # directory alone would leave Sparkle.framework/XPCServices as a dangling link.
+    for path in xpc_service_paths(framework):
+        if path.is_symlink():
+            path.unlink()
+        else:
+            trash(path)
+    if xpc_service_paths(framework):
+        raise ValueError("Sparkle XPC services remain after removal")
 
 
 def signing_targets(app):
@@ -161,9 +179,7 @@ def main():
         built = plistlib.loads((app / "Contents/Info.plist").read_bytes())
         if (built["CFBundleIdentifier"], built["CFBundleVersion"], built["SUPublicEDKey"]) != (IDENTIFIER, build, info["SUPublicEDKey"]):
             raise ValueError("Built app identity/version/trust root mismatch")
-        xpcs = app / "Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices"
-        if xpcs.exists():
-            trash(xpcs)
+        remove_unused_xpc_services(app / "Contents/Frameworks/Sparkle.framework")
         certificate = work / "developer-id.cer"
         run("gopass", "fscopy", args.certificate_entry, certificate, sensitive=True)
         with signing_identity(certificate, args.private_key_entry) as identity:

@@ -40,7 +40,6 @@ struct BurstyDevicesTests {
             }
             time += step
         }
-        _ = input
         return ring
     }
 

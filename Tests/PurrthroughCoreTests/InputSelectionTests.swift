@@ -2,7 +2,7 @@ import Testing
 @testable import PurrthroughCore
 
 struct InputSelectionTests {
-    let lineIn = InputDeviceInfo(uid: "usb-line", name: "CUBILUX HLMS-C4 Line IN", isBluetooth: false)
+    let lineIn = InputDeviceInfo(uid: "usb-line", name: "USB Audio Line In", isBluetooth: false)
     let usbMic = InputDeviceInfo(uid: "usb-mic", name: "USB PnP Sound Device", isBluetooth: false)
     let headset = InputDeviceInfo(uid: "bt", name: "Bluetooth Headline Set", isBluetooth: true)
 
