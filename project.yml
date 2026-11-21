@@ -1,0 +1,59 @@
+name: Purrthrough
+
+options:
+  bundleIdPrefix: com.firefungames
+  deploymentTarget:
+    macOS: "15.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: true
+    GENERATE_INFOPLIST_FILE: false
+    MACOSX_DEPLOYMENT_TARGET: "15.0"
+
+packages:
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    exactVersion: 2.8.1
+
+targets:
+  Purrthrough:
+    type: application
+    platform: macOS
+    sources:
+      - path: Sources/PurrthroughApp
+      - path: Sources/PurrthroughCore
+      - path: Resources/Assets.xcassets
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.firefungames.purrthrough
+        PRODUCT_NAME: Purrthrough
+        ENABLE_HARDENED_RUNTIME: true
+        INFOPLIST_FILE: Config/Purrthrough-Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    entitlements:
+      path: Config/Purrthrough.entitlements
+      properties:
+        # Hardened runtime blocks all audio input without this.
+        com.apple.security.device.audio-input: true
+    dependencies:
+      - package: Sparkle
+      - sdk: AppKit.framework
+      - sdk: AudioToolbox.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreAudio.framework
+      - sdk: ServiceManagement.framework
+
+schemes:
+  Purrthrough:
+    build:
+      targets:
+        Purrthrough: all
+    run:
+      config: Debug
+    archive:
+      config: Release
