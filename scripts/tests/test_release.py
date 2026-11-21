@@ -60,7 +60,7 @@ class ReleaseGuards(unittest.TestCase):
         self.assertEqual(declared, release.EXPECTED_APP_ENTITLEMENTS)
 
     def test_unused_sparkle_xpc_services_leave_no_dangling_link(self):
-        with tempfile.TemporaryDirectory(dir=release.TEMP_ROOT) as root:
+        with tempfile.TemporaryDirectory() as root:
             framework = Path(root) / "Sparkle.framework"
             (framework / "Versions/B/XPCServices/Installer.xpc").mkdir(parents=True)
             (framework / "Versions/Current").symlink_to("B")
