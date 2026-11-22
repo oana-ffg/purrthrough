@@ -5,6 +5,12 @@ import ServiceManagement
 /// device list and toggles always reflect the current state.
 @MainActor
 final class StatusItemController: NSObject, NSMenuDelegate {
+    /// How long the input may be silent before the output is released.
+    private static let releaseChoices: [(title: String, seconds: TimeInterval?)] = [
+        ("Never", nil), ("After 10 Seconds", 10), ("After 30 Seconds", 30),
+        ("After 1 Minute", 60), ("After 5 Minutes", 300),
+    ]
+
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let playthrough: PlaythroughController
     private let updater: UpdateController
@@ -41,6 +47,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             self?.playthrough.volume = value
         }
         menu.addItem(volume)
+        menu.addItem(releaseWhenSilentItem())
         menu.addItem(.separator())
 
         menu.addItem(.sectionHeader(title: "Input"))
@@ -83,6 +90,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         case .needsMicrophoneAccess: "Needs permission to hear the input"
         case .noInputChosen: "Choose an input below"
         case .waitingForInput(let name): "Waiting for \(name)"
+        case .silent(let input): "\(input) is silent; output released"
         case .playing(let input, let output): "\(input) → \(output)"
         case .failed(let message): "Problem: \(message)"
         }
@@ -92,7 +100,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         guard let button = item.button else { return }
         let image: NSImage?
         switch playthrough.status {
-        case .playing, .off, .waitingForInput, .noInputChosen, .awaitingMicrophoneAccess:
+        case .playing, .silent, .off, .waitingForInput, .noInputChosen, .awaitingMicrophoneAccess:
             // The meowing cat; dimmed whenever it isn't passing sound through.
             image = NSImage(named: "MenuBarIcon")
             image?.accessibilityDescription = "Purrthrough"
@@ -113,6 +121,26 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
     @objc private func togglePlaythrough() {
         playthrough.isEnabled.toggle()
+    }
+
+    /// While the output is held, multipoint Bluetooth headphones treat this Mac as
+    /// busy and will not switch to another device.
+    private func releaseWhenSilentItem() -> NSMenuItem {
+        let submenu = NSMenu()
+        for (index, choice) in Self.releaseChoices.enumerated() {
+            let entry = toggle(choice.title, on: playthrough.releaseWhenSilentAfter == choice.seconds,
+                               #selector(chooseReleaseWhenSilent(_:)))
+            entry.tag = index
+            submenu.addItem(entry)
+        }
+        let item = NSMenuItem(title: "Release Output When Silent", action: nil, keyEquivalent: "")
+        item.submenu = submenu
+        return item
+    }
+
+    @objc private func chooseReleaseWhenSilent(_ sender: NSMenuItem) {
+        guard Self.releaseChoices.indices.contains(sender.tag) else { return }
+        playthrough.releaseWhenSilentAfter = Self.releaseChoices[sender.tag].seconds
     }
 
     @objc private func chooseInput(_ sender: NSMenuItem) {

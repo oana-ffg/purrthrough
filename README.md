@@ -30,6 +30,7 @@ Purrthrough is the missing checkbox. It lives in the menu bar as a small meowing
 - **One click.** A meowing cat in the menu bar: bright while it's playing, dimmed when idle, a warning sign when it needs you.
 - **Volume up to 400%.** A slider in the menu lifts quiet sources, such as a monitor's headphone jack, with a soft limiter so loud peaks round off instead of crackling.
 - **Follows your output.** Switch from speakers to AirPods or other Bluetooth headphones and the sound follows within a moment. It never stays stuck on the speakers behind your back.
+- **Lets go of your headphones.** An open output keeps Bluetooth headphones busy even when it only carries silence, so multipoint headphones won't switch to your phone. After 30 seconds without sound from the input, Purrthrough releases the output, and the first sound takes it back a moment later (a Bluetooth output may miss the first second). Change the delay or turn it off under **Release Output When Silent**.
 - **Bluetooth-friendly.** Purrthrough only opens the input you picked. It never touches your headset's microphone, which would drop the headset into low-quality "call mode". Bluetooth inputs are labelled so you can avoid choosing one by accident.
 - **Glitch-free over hours.** Two audio devices never tick at exactly the same speed. Purrthrough keeps a small buffer (40 ms, or a little more for Bluetooth outputs that pull audio in large chunks) and adjusts playback speed by a fraction of a percent, far below what you can hear, so the sound never builds up delay, drops out or clicks.
 - **Self-healing.** Unplug the USB sound card and Purrthrough waits for it; plug it back in and playback resumes. Sleep, wake, sample-rate changes and devices that silently stop sending audio all trigger an automatic restart.
@@ -63,10 +64,11 @@ input device ──► capture (Core Audio HAL unit)
 
 - The capture side runs at the input device's native rate; the engine converts to the output's rate (for example 48 kHz USB in, 44.1 kHz Bluetooth out).
 - The realtime audio threads never allocate, lock or log. They talk through a single-producer, single-consumer buffer.
+- A peak meter on the capture side feeds the silence gate. Sound counts from −50 dBFS, well above a line input's own noise (about −67 dBFS on the author's USB line input). Every 10 seconds the log records the input peak, so you can check where your source's noise sits.
 - The buffer target grows to cover the largest chunks the devices actually move. After an underrun it refills before playing again rather than stuttering.
 - When the system output changes, only the playback side is rebuilt. The input keeps running and the buffer bridges the gap.
 
-The hardware-independent parts (the buffer, drift control, latency planning, volume and input selection) live in `Sources/PurrthroughCore` and are unit-tested with `swift test`, including multi-threaded and bursty-device simulations.
+The hardware-independent parts (the buffer, drift control, latency planning, volume, silence detection and input selection) live in `Sources/PurrthroughCore` and are unit-tested with `swift test`, including multi-threaded and bursty-device simulations.
 
 ## Build from source
 

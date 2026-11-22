@@ -2,6 +2,22 @@ import Testing
 @testable import PurrthroughCore
 
 struct StereoRingBufferTests {
+    @Test func discardKeepsOnlyTheNewestAudio() {
+        let ring = StereoRingBuffer(capacityFrames: 8)
+        let samples: [Float] = [1, 2, 3, 4, 5, 6]
+        ring.write(left: samples, right: samples, frames: 6)
+        ring.discard(keepingNewest: 2)
+        #expect(ring.availableFrames == 2)
+        ring.discard(keepingNewest: 5)
+        #expect(ring.availableFrames == 2)
+        ring.setPrimeLevel(0)
+        var left = [Float](repeating: 0, count: 2)
+        var right = left
+        #expect(ring.read(left: &left, right: &right, frames: 2) == 2)
+        #expect(left == [5, 6] && right == [5, 6])
+        #expect(ring.totalDropped == 0 && ring.totalMissing == 0)
+    }
+
     @Test func preservesChannelsAndOrderAcrossWraparound() {
         let ring = StereoRingBuffer(capacityFrames: 4)
         var outLeft = [Float](repeating: -1, count: 3)

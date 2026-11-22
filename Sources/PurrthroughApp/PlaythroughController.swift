@@ -9,6 +9,8 @@ enum PlaythroughStatus: Equatable {
     case needsMicrophoneAccess
     case noInputChosen
     case waitingForInput(String)
+    /// Capturing, but the output is released because the input is silent.
+    case silent(input: String)
     case playing(input: String, output: String)
     case failed(String)
 }
@@ -23,7 +25,10 @@ final class PlaythroughController {
         static let inputUID = "inputUID"
         static let inputName = "inputName"
         static let volume = "volume"
+        static let releaseWhenSilentAfter = "releaseWhenSilentAfter"
     }
+
+    static let defaultReleaseWhenSilentAfter: TimeInterval = 30
 
     /// Bluetooth outputs can take a couple of seconds to start pulling audio.
     private static let stallTimeout: TimeInterval = 5
@@ -40,6 +45,13 @@ final class PlaythroughController {
     var onStatusChange: (() -> Void)?
 
     private var ring: StereoRingBuffer?
+    /// Outlives each capture, like the gate it feeds.
+    private let peakMeter = PeakMeter()
+    private lazy var silenceGate = SilenceGate(releaseAfter: Self.validReleaseAfter(
+        (defaults.object(forKey: Key.releaseWhenSilentAfter) as? NSNumber)?.doubleValue
+            ?? Self.defaultReleaseWhenSilentAfter))
+    /// Loudest input since the last periodic log line.
+    private var loggedPeak: Float = 0
     private var capture: InputCapture?
     private var captureUID: String?
     private var captureDevice: AudioDeviceID?
@@ -80,6 +92,23 @@ final class PlaythroughController {
             defaults.set(newValue, forKey: Key.enabled)
             reconcile()
         }
+    }
+
+    /// Seconds of input silence after which the output device is released, so
+    /// multipoint headphones can switch to another device; `nil` never releases it.
+    var releaseWhenSilentAfter: TimeInterval? {
+        get { silenceGate.releaseAfter }
+        set {
+            let value = Self.validReleaseAfter(newValue ?? 0)
+            silenceGate.releaseAfter = value
+            defaults.set(value ?? 0, forKey: Key.releaseWhenSilentAfter)
+            reconcile()
+        }
+    }
+
+    /// Stored as seconds; zero (or anything not positive) means never.
+    private static func validReleaseAfter(_ seconds: TimeInterval) -> TimeInterval? {
+        seconds.isFinite && seconds > 0 ? seconds : nil
     }
 
     var selectedInputUID: String? { defaults.string(forKey: Key.inputUID) }
@@ -180,6 +209,14 @@ final class PlaythroughController {
         if captureUID != chosen.uid || captureDevice != inputID || capture == nil {
             try startCapture(device: inputID, uid: chosen.uid)
         }
+        guard silenceGate.holdsOutput(at: ProcessInfo.processInfo.systemUptime) else {
+            if player != nil {
+                log.info("Input silent; releasing the output")
+                stopPlayer()
+            }
+            status = .silent(input: chosen.name)
+            return
+        }
         let outputID = try AudioHardware.defaultOutputDevice()
         if player == nil || playerDevice != outputID || player?.isRunning == false {
             try startPlayer(device: outputID)
@@ -196,7 +233,7 @@ final class PlaythroughController {
         }
         // At least a second of audio, and never less than a large Bluetooth pull.
         let ring = StereoRingBuffer(capacityFrames: max(Int(rate), 16_384))
-        let capture = try InputCapture(device: device, ring: ring)
+        let capture = try InputCapture(device: device, ring: ring, meter: peakMeter)
         guard capture.sampleRate == rate else {
             throw AudioHardwareError(operation: "Matching the input rate (\(capture.sampleRate) vs \(rate) Hz)", status: -1)
         }
@@ -252,7 +289,17 @@ final class PlaythroughController {
     }
 
     private func tick() {
-        guard let ring, let player, var drift else { return }
+        guard let ring, var drift else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        let peak = peakMeter.take()
+        loggedPeak = max(loggedPeak, peak)
+        silenceGate.record(peak: peak, at: now)
+        // reconcile() keeps a player exactly while the gate holds the output, so a
+        // mismatch means the input just fell silent or came back.
+        if silenceGate.holdsOutput(at: now) != (player != nil) {
+            reconcile()
+            return
+        }
         // Grow the queue once a device turns out to move bigger chunks.
         let updated = LatencyPlan(sampleRate: sampleRate, largestRead: ring.largestRead, largestWrite: ring.largestWrite)
         if updated != plan {
@@ -261,34 +308,54 @@ final class PlaythroughController {
             ring.setPrimeLevel(updated.targetFrames)
             log.info("Latency target \(updated.targetFrames) frames (largest read \(ring.largestRead), write \(ring.largestWrite))")
         }
-        let decision = drift.update(fillFrames: ring.availableFrames)
+        var rate: Double?
+        if let player {
+            let decision = drift.update(fillFrames: ring.availableFrames)
+            if let trim = decision.trimToFrames { ring.requestTrim(toFill: trim) }
+            player.setRate(decision.rate)
+            rate = decision.rate
+        } else {
+            // Nothing reads the FIFO while the output is released; keep it from
+            // overflowing so the newest audio is ready when sound returns.
+            ring.discard(keepingNewest: drift.targetFrames)
+        }
         self.drift = drift
-        if let trim = decision.trimToFrames { ring.requestTrim(toFill: trim) }
-        player.setRate(decision.rate)
 
         if let failures = capture?.takeRenderFailures(), failures > 0 {
             log.error("Input render failed \(failures) times")
         }
         ticks += 1
         if ticks % 100 == 0 {
-            log.info("""
-                fill \(ring.availableFrames)/\(drift.targetFrames) frames, rate \(decision.rate, format: .fixed(precision: 5)), \
-                underruns \(ring.totalUnderruns), missing \(ring.totalMissing), dropped \(ring.totalDropped)
-                """)
+            logStatistics(ring: ring, targetFrames: drift.targetFrames, rate: rate)
         }
-        let now = ProcessInfo.processInfo.systemUptime
         let written = ring.totalWritten
         let read = ring.totalRead
-        if written != lastProgress.written && read != lastProgress.read {
+        let inputMoved = written != lastProgress.written
+        // A released output is not expected to read anything.
+        let outputMoved = player == nil || read != lastProgress.read
+        if inputMoved && outputMoved {
             lastProgress = (written, read, now)
         } else if now - lastProgress.at > Self.stallTimeout {
             // A device stopped delivering or consuming audio without telling us.
-            if written == lastProgress.written {
-                restart(reason: "input stalled")
-            } else {
+            if inputMoved {
                 restartOutput(reason: "output stalled")
+            } else {
+                restart(reason: "input stalled")
             }
         }
+    }
+
+    private func logStatistics(ring: StereoRingBuffer, targetFrames: Int, rate: Double?) {
+        // The input peak shows where the source's noise floor sits relative to the
+        // silence threshold.
+        let peakDecibels = 20 * log10(Double(max(loggedPeak, 1e-7)))
+        loggedPeak = 0
+        let output = rate.map { String(format: "rate %.5f", $0) } ?? "output released"
+        log.info("""
+            input peak \(peakDecibels, format: .fixed(precision: 1)) dBFS, \(output, privacy: .public), \
+            fill \(ring.availableFrames)/\(targetFrames) frames, \
+            underruns \(ring.totalUnderruns), missing \(ring.totalMissing), dropped \(ring.totalDropped)
+            """)
     }
 
     private func resetProgress() {

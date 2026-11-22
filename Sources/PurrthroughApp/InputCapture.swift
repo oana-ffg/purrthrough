@@ -3,7 +3,8 @@ import CoreAudio
 import Foundation
 import Synchronization
 
-/// Captures one input device with an AUHAL unit and pushes its audio into the FIFO.
+/// Captures one input device with an AUHAL unit, pushes its audio into the FIFO and
+/// reports its loudness to a peak meter.
 ///
 /// Only the chosen device is opened. Purrthrough never touches the system default
 /// input (often a Bluetooth headset microphone), because opening a headset
@@ -12,6 +13,7 @@ final class InputCapture: @unchecked Sendable {
     private(set) var sampleRate: Double = 0
     private let unit: AudioUnit
     private let ring: StereoRingBuffer
+    private let meter: PeakMeter
     private let maximumFrames: UInt32 = 8192
     private let bufferList: UnsafeMutableAudioBufferListPointer
     /// The capture buffers we own. `AudioUnitRender` may repoint `mData`, so each
@@ -19,7 +21,7 @@ final class InputCapture: @unchecked Sendable {
     private let channelBuffers: UnsafeMutablePointer<UnsafeMutablePointer<Float>>
     private let renderFailures = Atomic<Int>(0)
 
-    init(device: AudioDeviceID, ring: StereoRingBuffer) throws {
+    init(device: AudioDeviceID, ring: StereoRingBuffer, meter: PeakMeter) throws {
         let deviceChannels = try AudioHardware.channelCount(of: device, scope: kAudioObjectPropertyScopeInput)
         let channels = min(max(deviceChannels, 1), 2)
         var description = AudioComponentDescription(
@@ -32,6 +34,7 @@ final class InputCapture: @unchecked Sendable {
         try check(AudioComponentInstanceNew(component, &instance), "Creating the input audio unit")
         unit = instance!
         self.ring = ring
+        self.meter = meter
         bufferList = AudioBufferList.allocate(maximumBuffers: channels)
         channelBuffers = .allocate(capacity: channels)
         for index in 0..<channels {
@@ -138,6 +141,7 @@ final class InputCapture: @unchecked Sendable {
         let left = leftData.assumingMemoryBound(to: Float.self)
         let right = rightData.assumingMemoryBound(to: Float.self)
         ring.write(left: left, right: right, frames: Int(frames))
+        meter.record(left: left, right: right, frames: Int(frames))
         return noErr
     }
 

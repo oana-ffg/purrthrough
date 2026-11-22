@@ -149,14 +149,21 @@ public final class StereoRingBuffer: @unchecked Sendable {
         trimRequest.store(max(0, fillFrames), ordering: .releasing)
     }
 
-    private func applyPendingTrim() {
-        let target = trimRequest.exchange(-1, ordering: .acquiring)
-        guard target >= 0 else { return }
+    /// Consumer only: call it from the reader, or from another thread only while no
+    /// reader is running. Discards the oldest audio until at most `frames` remain,
+    /// for example to keep the input flowing while nothing plays it.
+    public func discard(keepingNewest frames: Int) {
         let readCount = readTotal.load(ordering: .relaxed)
         let writeCount = writtenTotal.load(ordering: .acquiring)
-        let excess = (writeCount - readCount) - target
+        let excess = (writeCount - readCount) - max(0, frames)
         if excess > 0 {
             readTotal.store(readCount + excess, ordering: .releasing)
         }
+    }
+
+    private func applyPendingTrim() {
+        let target = trimRequest.exchange(-1, ordering: .acquiring)
+        guard target >= 0 else { return }
+        discard(keepingNewest: target)
     }
 }

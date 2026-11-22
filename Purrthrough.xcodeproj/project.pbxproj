@@ -23,19 +23,23 @@
 		8AE4DB15DDF054D6F1A76A20 /* StatusItemController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE734DACB2C321F6B9333A1B /* StatusItemController.swift */; };
 		8CA3902DE35DE163C777297F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 24475F93296ABC19A211914C /* Assets.xcassets */; };
 		A414320BA19C7945B8AFE1D4 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4EC42E7A7AFDC5E79D7090AF /* AVFoundation.framework */; };
+		B07D8B8CCC6AB298564630FC /* SilenceGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 059C085416F8EB7AC51BE7CC /* SilenceGate.swift */; };
 		B3BF838443AB69D47DB591F8 /* InputCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24D5D6093D85D7906CC5F381 /* InputCapture.swift */; };
 		BC94EA755800D13AB88D25DE /* StereoRingBuffer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3FE0C19C6E82FFDD3C9BAC6C /* StereoRingBuffer.swift */; };
 		C0B89D3539DC043E92F048CC /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C8161C25EBF6B808717C8039 /* CoreAudio.framework */; };
+		C1CAE7DA0385DA757CA4CAA1 /* PeakMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25242AA5EC04442299DADFDF /* PeakMeter.swift */; };
 		C972F7EB13EC0482A349C17C /* UpdateController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08386803583F0EADB7045BB4 /* UpdateController.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		059C085416F8EB7AC51BE7CC /* SilenceGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SilenceGate.swift; sourceTree = "<group>"; };
 		08386803583F0EADB7045BB4 /* UpdateController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateController.swift; sourceTree = "<group>"; };
 		0F1F0A72DECA32A89F85E828 /* PlaythroughController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaythroughController.swift; sourceTree = "<group>"; };
 		1C4D1EA174BF41E4ECFC2B7D /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
 		1D6E55E48A3702BE8A403167 /* ServiceManagement.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ServiceManagement.framework; path = System/Library/Frameworks/ServiceManagement.framework; sourceTree = SDKROOT; };
 		24475F93296ABC19A211914C /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		24D5D6093D85D7906CC5F381 /* InputCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InputCapture.swift; sourceTree = "<group>"; };
+		25242AA5EC04442299DADFDF /* PeakMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PeakMeter.swift; sourceTree = "<group>"; };
 		3FE0C19C6E82FFDD3C9BAC6C /* StereoRingBuffer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StereoRingBuffer.swift; sourceTree = "<group>"; };
 		4B937C4D642E53441425A0FA /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		4EC42E7A7AFDC5E79D7090AF /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
@@ -84,7 +88,9 @@
 				7E61CB73A152DFEC7A35ECFC /* DriftController.swift */,
 				850469E5153553962BD2175D /* InputSelection.swift */,
 				C1F9C81774874585FB743F60 /* LatencyPlan.swift */,
+				25242AA5EC04442299DADFDF /* PeakMeter.swift */,
 				7989A45008A98E9BA352F36A /* PlaybackGain.swift */,
+				059C085416F8EB7AC51BE7CC /* SilenceGate.swift */,
 				3FE0C19C6E82FFDD3C9BAC6C /* StereoRingBuffer.swift */,
 			);
 			path = PurrthroughCore;
@@ -225,8 +231,10 @@
 				48F5C83E7867D4C789AC9E61 /* InputSelection.swift in Sources */,
 				7EA8549F0D658A7C6FD7C716 /* LatencyPlan.swift in Sources */,
 				7B685154F877BFE67F5EAA14 /* OutputPlayer.swift in Sources */,
+				C1CAE7DA0385DA757CA4CAA1 /* PeakMeter.swift in Sources */,
 				76CDCBFD167ED2197F9C075E /* PlaybackGain.swift in Sources */,
 				1C92A5E87555A6AC17D8F5F3 /* PlaythroughController.swift in Sources */,
+				B07D8B8CCC6AB298564630FC /* SilenceGate.swift in Sources */,
 				8AE4DB15DDF054D6F1A76A20 /* StatusItemController.swift in Sources */,
 				BC94EA755800D13AB88D25DE /* StereoRingBuffer.swift in Sources */,
 				C972F7EB13EC0482A349C17C /* UpdateController.swift in Sources */,
