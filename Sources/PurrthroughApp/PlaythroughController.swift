@@ -96,13 +96,13 @@ final class PlaythroughController {
 
     /// Seconds of input silence after which the output device is released, so
     /// multipoint headphones can switch to another device; `nil` never releases it.
+    /// The next tick applies it, after reading the newest input peak.
     var releaseWhenSilentAfter: TimeInterval? {
         get { silenceGate.releaseAfter }
         set {
             let value = Self.validReleaseAfter(newValue ?? 0)
             silenceGate.releaseAfter = value
             defaults.set(value ?? 0, forKey: Key.releaseWhenSilentAfter)
-            reconcile()
         }
     }
 
@@ -233,6 +233,9 @@ final class PlaythroughController {
         }
         // At least a second of audio, and never less than a large Bluetooth pull.
         let ring = StereoRingBuffer(capacityFrames: max(Int(rate), 16_384))
+        // The previous capture's sound must not let a quiet new input take the output.
+        silenceGate.forgetSound()
+        _ = peakMeter.take()
         let capture = try InputCapture(device: device, ring: ring, meter: peakMeter)
         guard capture.sampleRate == rate else {
             throw AudioHardwareError(operation: "Matching the input rate (\(capture.sampleRate) vs \(rate) Hz)", status: -1)

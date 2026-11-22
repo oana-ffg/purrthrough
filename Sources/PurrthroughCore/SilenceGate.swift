@@ -11,8 +11,10 @@ import Foundation
 /// The gate starts closed, so launching, waking or reconnecting while the source is
 /// quiet never grabs the output.
 public struct SilenceGate: Sendable {
-    /// −50 dBFS. Far above a line input's own noise (a USB line input with its
-    /// source silent peaks at about −67 dBFS) and far below quiet speech or music.
+    /// −50 dBFS, measured before the volume slider. A USB line input with its source
+    /// silent peaks at about −67 dBFS, and a system chime through a monitor's
+    /// headphone jack at about −32 dBFS. A noisier input never releases the output and a
+    /// source quieter than this never takes it; for those, choose Never.
     public static let defaultThreshold: Float = 0.003_162
 
     /// Input peak at or above which the input counts as sounding.
@@ -29,6 +31,12 @@ public struct SilenceGate: Sendable {
     /// Call periodically with the loudest input sample since the previous call.
     public mutating func record(peak: Float, at now: TimeInterval) {
         if peak >= threshold { lastSound = now }
+    }
+
+    /// Forget earlier sound, e.g. when a different capture starts: its predecessor's
+    /// activity says nothing about the new input.
+    public mutating func forgetSound() {
+        lastSound = -.infinity
     }
 
     /// Whether the output should be held at `now`.

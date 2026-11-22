@@ -53,9 +53,12 @@ final class OutputPlayer {
         engine.attach(varispeed)
         engine.connect(source, to: varispeed, format: format)
         engine.connect(varispeed, to: engine.mainMixerNode, format: format)
+        // Delivered on the engine's own thread. Hop asynchronously: a synchronous
+        // handler on the main queue would block that thread while the owner stops and
+        // releases this engine, which Apple warns against.
         configurationObserver = NotificationCenter.default.addObserver(
-            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main) { _ in
-            MainActor.assumeIsolated { onConfigurationChange() }
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil) { _ in
+            DispatchQueue.main.async { MainActor.assumeIsolated { onConfigurationChange() } }
         }
         engine.prepare()
         try engine.start()
