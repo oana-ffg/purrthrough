@@ -14,9 +14,13 @@ public final class PeakMeter: Sendable {
     /// are ignored.
     public func record(left: UnsafePointer<Float>, right: UnsafePointer<Float>, frames: Int) {
         var peak: Float = 0
+        // Compare each channel on its own: `max` with a NaN can return the NaN and
+        // hide the other channel's sample.
         for frame in 0..<frames {
-            let magnitude = max(abs(left[frame]), abs(right[frame]))
-            if magnitude > peak { peak = magnitude }
+            let leftMagnitude = abs(left[frame])
+            if leftMagnitude > peak { peak = leftMagnitude }
+            let rightMagnitude = abs(right[frame])
+            if rightMagnitude > peak { peak = rightMagnitude }
         }
         let candidate = peak.bitPattern
         var current = bits.load(ordering: .relaxed)

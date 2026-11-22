@@ -36,6 +36,13 @@ struct SilenceGateTests {
         #expect(gate.holdsOutput(at: 11))
     }
 
+    @Test func forgettingSoundReleasesAtOnce() {
+        var gate = SilenceGate(releaseAfter: 30)
+        gate.record(peak: 0.5, at: 100)
+        gate.forgetSound()
+        #expect(!gate.holdsOutput(at: 101))
+    }
+
     @Test func neverReleasingHoldsEvenBeforeAnySound() {
         var gate = SilenceGate(releaseAfter: nil)
         #expect(gate.holdsOutput(at: 0))

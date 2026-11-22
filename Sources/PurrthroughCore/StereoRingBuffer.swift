@@ -2,8 +2,9 @@ import Synchronization
 
 /// Single-producer, single-consumer stereo sample FIFO for realtime audio threads.
 ///
-/// The input device's IO thread is the only writer and the output device's render
-/// thread is the only reader. Neither side allocates, locks, or blocks. Counters
+/// The input device's IO thread is the only writer. The output device's render
+/// thread is the reader; while no output is running, the owner may take its place
+/// (see `discard(keepingNewest:)`). Neither side allocates, locks, or blocks. Counters
 /// are monotonic frame totals; `Int` (64-bit) cannot overflow in practice.
 ///
 /// After an underrun (and at startup) the reader re-primes: it plays silence until

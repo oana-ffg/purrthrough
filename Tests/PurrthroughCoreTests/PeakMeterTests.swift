@@ -12,10 +12,16 @@ struct PeakMeterTests {
         #expect(meter.take() == 0)
     }
 
-    @Test func ignoresNaNButKeepsInfinity() {
+    @Test func aNaNInOneChannelDoesNotHideTheOther() {
         let meter = PeakMeter()
-        meter.record(left: [.nan, 0.2], right: [0.1, .nan], frames: 2)
+        meter.record(left: [.nan], right: [0.1], frames: 1)
+        #expect(meter.take() == 0.1)
+        meter.record(left: [0.2], right: [.nan], frames: 1)
         #expect(meter.take() == 0.2)
+    }
+
+    @Test func keepsInfinity() {
+        let meter = PeakMeter()
         meter.record(left: [-.infinity], right: [0], frames: 1)
         #expect(meter.take() == .infinity)
     }
